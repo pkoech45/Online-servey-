@@ -240,7 +240,7 @@ function renderLogin(message){
     const pass = document.getElementById('inputPass').value;
     const users = getUsers();
     if(!email || !pass){ alert('Enter email & password.'); return; }
-    if(!users[email] || users[email].password !== pass){ alert('Invalid credentials. For demo try: alice@example.com / demo123'); return; }
+    if(!users[email] || users[email].password !== pass){ alert('Invalid credentials.Please sign up'); return; }
     setCurrentUser(email);
     renderApp();
   });
