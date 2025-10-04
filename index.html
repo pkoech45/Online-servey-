@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>MicroSurvey — Earn $0.50 per Survey</title>
+<style>
+  :root{
+    --bg:#f4f7fb; --card:#fff; --accent:#0b63d6; --muted:#6b7280; --success:#16a34a;
+  }
+  body{font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);margin:0;padding:24px;display:flex;justify-content:center;}
+  .container{max-width:980px;width:100%;}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  h1{margin:0;font-size:20px;color:#0b3a66}
+  .card{background:var(--card);border-radius:12px;box-shadow:0 6px 18px rgba(15,23,42,0.08);padding:18px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:1fr 320px;gap:14px}
+  .btn{display:inline-block;padding:10px 14px;border-radius:10px;background:var(--accent);color:#fff;text-decoration:none;cursor:pointer;border:none}
+  .btn-ghost{background:transparent;border:1px solid #dfe7f4;color:var(--accent)}
+  .small{font-size:13px;color:var(--muted)}
+  input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #e6eefc;background:#fbfdff}
+  .survey-item{display:flex;justify-content:space-between;align-items:center;padding:12px;border-radius:8px;border:1px dashed #e6eefc;margin-bottom:10px}
+  .muted{color:var(--muted);font-size:13px}
+  .balance{font-weight:700;color:var(--success)}
+  .link-like{background:none;border:none;color:var(--accent);cursor:pointer;padding:0}
+  footer{margin-top:22px;text-align:center;color:var(--muted);font-size:13px}
+  .notice{background:#fff7ed;border-left:4px solid #ffb020;padding:10px;border-radius:8px}
+  @media (max-width:900px){.grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>MicroSurvey — Earn <span class="small">$0.50</span> per completed survey</h1>
+      <div id="authControls"></div>
+    </header>
+
+    <div class="grid">
+      <main>
+        <div class="card" id="mainCard">
+          <!-- dynamic content here -->
+        </div>
+
+        
+      </main>
+
+      <aside>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="small">Logged in as</div>
+              <div id="userName" style="font-weight:700">—</div>
+            </div>
+            <div style="text-align:right">
+              <div class="small">Balance</div>
+              <div class="balance" id="userBalance">$0.00</div>
+            </div>
+          </div>
+
+          <hr style="margin:12px 0">
+          <div class="small" style="margin-bottom:8px">Quick actions</div>
+          <button class="btn" id="btnWithdraw">Withdraw</button>
+          <button class="btn btn-ghost" id="btnMyCompleted" style="margin-left:8px">My Completed</button>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="small">About payouts</div>
+          <p class="small muted" style="margin-top:6px">
+            Each completed survey credits $0.50. Withdrawals in this demo generate a mock payout request. Real payouts require server-side handling.
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      <div class="small">Built as a demo. Do not accept real users without a backend.</div>
+    </footer>
+  </div>
+
+<script>
+/* -------------------------
+  Simple client-only paid survey demo
+  - Data stored in localStorage
+  - NOT SECURE — backend required for production
+------------------------- */
+
+const SURVEY_REWARD = 0.5; // USD
+
+// sample surveys (would normally come from server)
+const SAMPLE_SURVEYS = [
+  {
+    id: "s1",
+    title: "Morning Routine & Productivity",
+    description: "Short questionnaire about your morning habits.",
+    questions: [
+      { id: "q1", type: "mc", label: "How often do you exercise in the morning?", choices: ["Never","1-2 days/week","3-5 days/week","Everyday"] },
+      { id: "q2", type: "mc", label: "Do you drink coffee in the morning?", choices: ["Yes","No"] },
+      { id: "q3", type: "text", label: "Any tips to stay productive?" }
+    ],
+    estimated_minutes: 3
+  },
+  {
+    id: "s2",
+    title: "Shopping Preferences",
+    description: "Short questions about online shopping habits.",
+    questions: [
+      { id: "q1", type: "mc", label: "Do you shop online monthly?", choices: ["Yes","No"] },
+      { id: "q2", type: "mc", label: "Preferred payment method?", choices: ["Card","Wallet","COD","Other"] },
+      { id: "q3", type: "text", label: "What would make online shopping better?" }
+    ],
+    estimated_minutes: 4
+  }
+];
+
+// ---------- storage helpers ----------
+function storageKey(key){ return 'microsurvey_' + key; }
+function getUsers(){ return JSON.parse(localStorage.getItem(storageKey('users')) || '{}'); }
+function saveUsers(users){ localStorage.setItem(storageKey('users'), JSON.stringify(users)); }
+function getCurrentUser(){ return localStorage.getItem(storageKey('currentUser')); }
+function setCurrentUser(email){ localStorage.setItem(storageKey('currentUser'), email); }
+function getSurveys(){ // merge sample with persisted
+  const persisted = JSON.parse(localStorage.getItem(storageKey('surveys')) || 'null');
+  if(!persisted){
+    localStorage.setItem(storageKey('surveys'), JSON.stringify(SAMPLE_SURVEYS));
+    return SAMPLE_SURVEYS;
+  }
+  return persisted;
+}
+function setSurveys(s){ localStorage.setItem(storageKey('surveys'), JSON.stringify(s)); }
+
+// ---------- initialize demo data ----------
+if(!localStorage.getItem(storageKey('users'))){
+  // create a demo user
+  const demo = {
+    "alice@example.com": { name: "Alice Demo", email: "alice@example.com", password: "demo123", balance: 0, completed: [] }
+  };
+  saveUsers(demo);
+}
+
+// ---------- UI renderers ----------
+const mainCard = document.getElementById('mainCard');
+const authControls = document.getElementById('authControls');
+const userNameEl = document.getElementById('userName');
+const userBalanceEl = document.getElementById('userBalance');
+
+function renderAuthControls(){
+  const cur = getCurrentUser();
+  if(cur){
+    authControls.innerHTML = '<button class="link-like" id="btnLogout">Logout</button>';
+    document.getElementById('btnLogout').addEventListener('click', ()=>{ setCurrentUser(''); renderApp(); });
+  } else {
+    authControls.innerHTML = '<button class="btn" id="btnShowLogin">Login / Sign up</button>';
+    document.getElementById('btnShowLogin').addEventListener('click', ()=> renderLogin());
+  }
+}
+
+function renderSidebarUser(){
+  const cur = getCurrentUser();
+  if(!cur){
+    userNameEl.textContent = 'Not signed in';
+    userBalanceEl.textContent = '$0.00';
+  } else {
+    const users = getUsers();
+    const u = users[cur];
+    userNameEl.textContent = u?.name || cur;
+    userBalanceEl.textContent = '$' + (u?.balance?.toFixed(2) || '0.00');
+  }
+}
+
+function renderApp(){
+  renderAuthControls();
+  renderSidebarUser();
+
+  // main view: list surveys
+  const surveys = getSurveys();
+  let html = '<h2 style="margin-top:0">Available Surveys</h2>';
+  if(surveys.length === 0) html += '<p class="small muted">No surveys right now.</p>';
+  surveys.forEach(s=>{
+    html += `
+      <div class="survey-item">
+        <div>
+          <div style="font-weight:700">${escapeHtml(s.title)}</div>
+          <div class="muted small">${escapeHtml(s.description)} — ~${s.estimated_minutes} min</div>
+        </div>
+        <div style="text-align:right">
+          <div class="small muted">Reward</div>
+          <div style="font-weight:700">$${SURVEY_REWARD.toFixed(2)}</div>
+          <div style="margin-top:8px">
+            <button class="btn" data-action="take" data-id="${s.id}">Take</button>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `<hr style="margin:12px 0"><div class="small">Want to add surveys? Click <button class="link-like" id="btnAddSurvey">Add (demo)</button></div>`;
+  mainCard.innerHTML = html;
+
+  // wire buttons
+  [...mainCard.querySelectorAll('button[data-action="take"]')].forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.getAttribute('data-id');
+      const cur = getCurrentUser();
+      if(!cur){ renderLogin('You must sign in to take a survey.'); return; }
+      const users = getUsers();
+      if(users[cur].completed.includes(id)){
+        alert('You already completed this survey. Thank you!');
+        return;
+      }
+      const surveys = getSurveys();
+      const s = surveys.find(x => x.id===id);
+      renderSurvey(s);
+    });
+  });
+
+  document.getElementById('btnAddSurvey').addEventListener('click', addDemoSurvey);
+}
+
+function renderLogin(message){
+  renderAuthControls();
+  renderSidebarUser();
+
+  mainCard.innerHTML = `
+    <h2 style="margin-top:0">Sign in or Create an account</h2>
+    ${message ? `<div style="margin-bottom:8px;color:#b45309">${escapeHtml(message)}</div>` : ''}
+    <div style="display:grid;gap:8px">
+      <input placeholder="Full name (for sign up)" id="inputName" />
+      <input placeholder="Email" id="inputEmail" />
+      <input placeholder="Password" id="inputPass" type="password" />
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="btnSignin">Sign in</button>
+        <button class="btn btn-ghost" id="btnSignup">Sign up</button>
+        <button class="btn btn-ghost" id="btnBack">Back</button>
+      </div>
+      <div class="small muted">Demo accounts are stored in your browser only.</div>
+    </div>
+  `;
+  document.getElementById('btnBack').addEventListener('click', renderApp);
+  document.getElementById('btnSignin').addEventListener('click', () => {
+    const email = document.getElementById('inputEmail').value.trim().toLowerCase();
+    const pass = document.getElementById('inputPass').value;
+    const users = getUsers();
+    if(!email || !pass){ alert('Enter email & password.'); return; }
+    if(!users[email] || users[email].password !== pass){ alert('Invalid credentials. For demo try: alice@example.com / demo123'); return; }
+    setCurrentUser(email);
+    renderApp();
+  });
+  document.getElementById('btnSignup').addEventListener('click', () => {
+    const name = document.getElementById('inputName').value.trim();
+    const email = document.getElementById('inputEmail').value.trim().toLowerCase();
+    const pass = document.getElementById('inputPass').value;
+    if(!name || !email || !pass){ alert('Please fill name, email & password to sign up.'); return; }
+    const users = getUsers();
+    if(users[email]){ alert('An account with that email exists. Please sign in.'); return; }
+    users[email] = { name, email, password: pass, balance: 0, completed: [] };
+    saveUsers(users);
+    setCurrentUser(email);
+    renderApp();
+  });
+}
+
+function renderSurvey(s){
+  // show survey UI
+  let html = `<h2 style="margin-top:0">${escapeHtml(s.title)}</h2>`;
+  html += `<div class="muted small" style="margin-bottom:10px">${escapeHtml(s.description)}</div>`;
+  html += `<form id="surveyForm">`;
+  s.questions.forEach(q=>{
+    html += `<div style="margin-bottom:12px">`;
+    html += `<div style="font-weight:600">${escapeHtml(q.label)}</div>`;
+    if(q.type === 'mc'){
+      q.choices.forEach((c,idx)=>{
+        const inputId = `${q.id}_${idx}`;
+        html += `<div><label><input type="radio" name="${q.id}" value="${escapeHtml(c)}" id="${inputId}" /> ${escapeHtml(c)}</label></div>`;
+      });
+    } else {
+      html += `<textarea name="${q.id}" rows="3" placeholder="Your answer (optional)"></textarea>`;
+    }
+    html += `</div>`;
+  });
+  html += `<div style="display:flex;gap:8px"><button class="btn" type="submit">Submit & Earn $${SURVEY_REWARD.toFixed(2)}</button><button class="btn btn-ghost" id="btnCancel">Cancel</button></div>`;
+  html += `</form>`;
+
+  mainCard.innerHTML = html;
+
+  document.getElementById('btnCancel').addEventListener('click', renderApp);
+  document.getElementById('surveyForm').addEventListener('submit', (ev)=>{
+    ev.preventDefault();
+    const cur = getCurrentUser();
+    if(!cur){ alert('You must be signed in.'); renderLogin(); return; }
+    const users = getUsers();
+    if(users[cur].completed.includes(s.id)){ alert('You already completed this survey.'); renderApp(); return; }
+
+    // collect answers (demo: we don't send them anywhere)
+    const form = new FormData(ev.target);
+    const answers = {};
+    s.questions.forEach(q => {
+      answers[q.id] = form.get(q.id) || "";
+    });
+
+    // award user
+    users[cur].balance = (users[cur].balance || 0) + SURVEY_REWARD;
+    users[cur].completed.push(s.id);
+    saveUsers(users);
+
+    alert(`Thanks! You've been credited $${SURVEY_REWARD.toFixed(2)}. Your new balance is $${users[cur].balance.toFixed(2)}.`);
+
+    renderApp();
+  });
+}
+
+function addDemoSurvey(){
+  // simple demo admin function that adds a small survey
+  const surveys = getSurveys();
+  const newSurvey = {
+    id: 's' + (Math.random().toString(36).slice(2,8)),
+    title: 'Quick Feedback on a Mock Product',
+    description: 'Tell us what you think about a new product idea.',
+    questions: [
+      { id: 'q1', type: 'mc', label: 'Would you use this product?', choices: ['Yes','Maybe','No'] },
+      { id: 'q2', type: 'text', label: 'Why or why not?' }
+    ],
+    estimated_minutes: 2
+  };
+  surveys.unshift(newSurvey);
+  setSurveys(surveys);
+  renderApp();
+}
+
+// ---------- withdraw & completed list ----------
+document.getElementById('btnWithdraw').addEventListener('click', ()=>{
+  const cur = getCurrentUser();
+  if(!cur){ renderLogin('Sign in to request a withdrawal.'); return; }
+  const users = getUsers();
+  const u = users[cur];
+  if(!u || (u.balance || 0) < 1.0){
+    // demo: require minimum $1 for payout to reduce tiny-value churn
+    alert('Minimum withdrawal is $1.00 in this demo. Earn more by completing surveys.');
+    return;
+  }
+  // create a mock payout request (in production: call server API)
+  const payout = {
+    email: cur,
+    amount: u.balance,
+    requested_at: new Date().toISOString(),
+    id: 'p' + Math.random().toString(36).slice(2,8)
+  };
+  // store request locally
+  const existing = JSON.parse(localStorage.getItem(storageKey('payouts') ) || '[]');
+  existing.push(payout);
+  localStorage.setItem(storageKey('payouts'), JSON.stringify(existing));
+  // reset user balance (in production you'd mark pending, etc.)
+  u.balance = 0;
+  users[cur] = u;
+  saveUsers(users);
+  alert('Withdrawal requested (demo). Payout request saved locally. In production this would trigger a server-side payout.');
+  renderSidebarUser();
+});
+
+document.getElementById('btnMyCompleted').addEventListener('click', ()=>{
+  const cur = getCurrentUser();
+  if(!cur){ renderLogin('Sign in to view completed surveys.'); return; }
+  const users = getUsers();
+  const u = users[cur];
+  const surveys = getSurveys();
+  let html = `<h2 style="margin-top:0">Completed surveys</h2>`;
+  if(!u.completed || u.completed.length === 0) html += '<div class="small muted">You have not completed any surveys yet.</div>';
+  else {
+    html += '<div>';
+    u.completed.forEach(id=>{
+      const s = surveys.find(x=>x.id===id);
+      html += `<div style="padding:8px;border-bottom:1px solid #f1f6fb"><strong>${escapeHtml(s?.title || id)}</strong><div class="muted small">Reward: $${SURVEY_REWARD.toFixed(2)}</div></div>`;
+    });
+    html += '</div>';
+  }
+  html += `<div style="margin-top:12px"><button class="btn btn-ghost" id="btnBack2">Back</button></div>`;
+  mainCard.innerHTML = html;
+  document.getElementById('btnBack2').addEventListener('click', renderApp);
+});
+
+// ---------- utilities ----------
+function escapeHtml(str){
+  if(!str && str !== 0) return '';
+  return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+// initial render
+renderApp();
+</script>
+</body>
+</html>
